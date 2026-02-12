@@ -38,7 +38,7 @@ from openhands.server.user_auth.user_auth import UserAuth
 
 authorize_url_generator = AuthorizeUrlGenerator(
     client_id=SLACK_CLIENT_ID,
-    scopes=['app_mentions:read', 'chat:write'],
+    scopes=['app_mentions:read', 'chat:write', 'channels:read', 'groups:read'],
     user_scopes=['search:read'],
 )
 
@@ -90,6 +90,33 @@ class SlackManager(Manager):
             repo = match.group(1) if match.group(1) else match.group(2)
             return repo
 
+        return None
+
+    async def _get_channel_description(
+        self, bot_access_token: str, channel_id: str
+    ) -> str | None:
+        """Get channel description (purpose) from Slack API."""
+        try:
+            client = AsyncWebClient(token=bot_access_token)
+            response = await client.conversations_info(channel=channel_id)
+            if response.get('ok') and response.get('channel'):
+                purpose = response['channel'].get('purpose', {})
+                return purpose.get('value') if purpose else None
+        except Exception as e:
+            logger.warning(
+                f'Failed to get channel description for {channel_id}: {e}',
+                exc_info=True,
+            )
+        return None
+
+    def _parse_repo_from_description(self, description: str) -> str | None:
+        """Parse repo:{org}/{repo} pattern from channel description."""
+        if not description:
+            return None
+        pattern = r'repo:([a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+)'
+        match = re.search(pattern, description, re.IGNORECASE)
+        if match:
+            return match.group(1)
         return None
 
     async def _get_repositories(self, user_auth: UserAuth) -> list[Repository]:
@@ -258,10 +285,22 @@ class SlackManager(Manager):
                 slack_view.user_msg, user_repos
             )
 
-            # User mentioned a matching repo is their message, start job without repo selection form
+            # User mentioned a matching repo in their message, start job without repo selection form
             if match:
                 slack_view.selected_repo = repos[0].full_name
                 return True
+
+            channel_description = await self._get_channel_description(
+                slack_view.bot_access_token, slack_view.channel_id
+            )
+            default_repo = self._parse_repo_from_description(channel_description)
+            if default_repo:
+                matching_repos = [
+                    repo for repo in user_repos if repo.full_name == default_repo
+                ]
+                if matching_repos:
+                    slack_view.selected_repo = matching_repos[0].full_name
+                    return True
 
             logger.info(
                 'render_repository_selector',
