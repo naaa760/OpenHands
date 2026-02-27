@@ -294,7 +294,7 @@ export function ChatInterface() {
 
           {isChatLoading && !isReturningToConversation && (
             <div className="flex justify-center" data-testid="loading-spinner">
-              <Spinner size="md" />
+              <Spinner size="md" spinnerClassName="!w-[25px] !h-[25px]" />
             </div>
           )}
 
