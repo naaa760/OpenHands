@@ -27,7 +27,7 @@ import { useSyncPostHogConsent } from "#/hooks/use-sync-posthog-consent";
 import { LOCAL_STORAGE_KEYS } from "#/utils/local-storage";
 import { EmailVerificationGuard } from "#/components/features/guards/email-verification-guard";
 import { MaintenanceBanner } from "#/components/features/maintenance/maintenance-banner";
-import { cn, isMobileDevice } from "#/utils/utils";
+import { cn } from "#/utils/utils";
 import { Spinner } from "#/ui/spinner";
 import { useAppTitle } from "#/hooks/use-app-title";
 
@@ -217,9 +217,8 @@ export default function MainApp() {
     <div
       data-testid="root-layout"
       className={cn(
-        "h-screen lg:min-w-5xl flex flex-col md:flex-row bg-base",
+        "h-screen lg:min-w-5xl flex flex-col md:flex-row bg-base overflow-hidden",
         pathname === "/" ? "p-0" : "p-0 md:p-3 md:pl-0",
-        isMobileDevice() && "overflow-hidden",
       )}
     >
       <title>{appTitle}</title>
