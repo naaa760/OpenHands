@@ -1258,7 +1258,12 @@ class TestLiveStatusAppConversationService:
             self.mock_user
         )
         self.service._configure_llm_and_mcp.assert_called_once_with(
-            self.mock_user, 'gpt-4', test_conversation_id
+            self.mock_user,
+            'gpt-4',
+            test_conversation_id,
+            remote_workspace=None,
+            project_dir='/test/dir/repo',
+            trust_project_mcp=False,
         )
         # When selected_repository='test/repo', project_dir is resolved
         # to '/test/dir/repo' via get_project_dir. All downstream calls
@@ -1863,6 +1868,48 @@ class TestLiveStatusAppConversationService:
         assert server_config['command'] == 'npx'
         assert server_config['args'] == ['-y', 'my-package']
         assert server_config['env'] == {'API_KEY': 'secret'}
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_user_mcp_overrides_project_server_name(self):
+        """User MCP settings merged after project; same server name keeps user entry."""
+        from openhands.core.config.mcp_config import MCPConfig, MCPStdioServerConfig
+
+        self.mock_user.mcp_config = MCPConfig(
+            stdio_servers=[
+                MCPStdioServerConfig(
+                    name='dup',
+                    command='user-cmd',
+                    args=['u'],
+                )
+            ]
+        )
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        async def inject_project(
+            mcp_servers: dict,
+            remote_workspace,
+            project_dir,
+            trust_project_mcp,
+        ) -> None:
+            mcp_servers['dup'] = {
+                'url': 'http://project',
+                'transport': 'sse',
+            }
+
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.merge_project_mcp_into_flat_servers',
+            new=AsyncMock(side_effect=inject_project),
+        ):
+            llm, mcp_config = await self.service._configure_llm_and_mcp(
+                self.mock_user,
+                None,
+                self.conversation_id,
+                remote_workspace=AsyncMock(spec=AsyncRemoteWorkspace),
+                project_dir='/workspace',
+                trust_project_mcp=True,
+            )
+
+        assert mcp_config['mcpServers']['dup']['command'] == 'user-cmd'
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_merges_system_and_custom_servers(self):

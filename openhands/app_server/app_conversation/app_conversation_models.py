@@ -175,6 +175,14 @@ class AppConversationStartRequest(OpenHandsModel):
         ),
     )
 
+    trust_project_mcp: bool = Field(
+        default=False,
+        description=(
+            'When true, merge MCP servers from project .mcp.json files in the '
+            'workspace (after user approval in the client).'
+        ),
+    )
+
 
 class AppConversationUpdateRequest(BaseModel):
     """Request model for updating conversation metadata.

@@ -49,6 +49,9 @@ from openhands.app_server.app_conversation.app_conversation_start_task_service i
 from openhands.app_server.app_conversation.hook_loader import (
     load_hooks_from_agent_server,
 )
+from openhands.app_server.app_conversation.project_mcp import (
+    merge_project_mcp_into_flat_servers,
+)
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
     SQLAppConversationInfoService,
 )
@@ -306,6 +309,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     remote_workspace=remote_workspace,
                     selected_repository=request.selected_repository,
                     plugins=request.plugins,
+                    trust_project_mcp=request.trust_project_mcp,
                 )
             )
 
@@ -1088,7 +1092,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
 
     async def _configure_llm_and_mcp(
-        self, user: UserInfo, llm_model: str | None, conversation_id: UUID
+        self,
+        user: UserInfo,
+        llm_model: str | None,
+        conversation_id: UUID,
+        remote_workspace: AsyncRemoteWorkspace | None = None,
+        project_dir: str | None = None,
+        trust_project_mcp: bool = False,
     ) -> tuple[LLM, dict]:
         """Configure LLM and MCP (Model Context Protocol) settings.
 
@@ -1096,6 +1106,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             user: User information containing LLM preferences
             llm_model: Optional specific model to use, falls back to user default
             conversation_id: Conversation ID forwarded to the OpenHands MCP server
+            remote_workspace: Sandbox workspace (used to read project .mcp.json)
+            project_dir: Resolved project root inside the sandbox
+            trust_project_mcp: If true, merge project-level MCP after approval
 
         Returns:
             Tuple of (configured LLM instance, MCP config dictionary)
@@ -1108,6 +1121,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # Add system-generated servers (default + tavily)
         await self._add_system_mcp_servers(mcp_servers, user, conversation_id)
+
+        await merge_project_mcp_into_flat_servers(
+            mcp_servers,
+            remote_workspace,
+            project_dir,
+            trust_project_mcp,
+        )
 
         # Merge custom servers from user settings
         self._merge_custom_mcp_config(mcp_servers, user)
@@ -1476,6 +1496,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         remote_workspace: AsyncRemoteWorkspace | None = None,
         selected_repository: str | None = None,
         plugins: list[PluginSpec] | None = None,
+        trust_project_mcp: bool = False,
     ) -> StartConversationRequest:
         """Build a complete conversation request for a user.
 
@@ -1499,7 +1520,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # Configure LLM and MCP
         llm, mcp_config = await self._configure_llm_and_mcp(
-            user, llm_model, conversation_id
+            user,
+            llm_model,
+            conversation_id,
+            remote_workspace=remote_workspace,
+            project_dir=project_dir,
+            trust_project_mcp=trust_project_mcp,
         )
 
         # Create agent with context
